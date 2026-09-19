@@ -6,10 +6,9 @@ services:
     image: frame-get:latest
     container_name: frame-get
     ports:
-      # Only expose the development/debug port on the host loopback address.
-      # The existing Nginx container should proxy to frame-get:3000 over the
-      # Compose network, so it remains the only service bound to host port 80.
-      - "127.0.0.1:${APP_PORT:-3000}:3000"
+      # Keep host port 80 for the existing Nginx container. Port 3000 remains
+      # reachable from the LAN for diagnostics and direct intranet access.
+      - "${APP_HOST:-0.0.0.0}:${APP_PORT:-3000}:3000"
     environment:
       HOST: 0.0.0.0
       PORT: 3000

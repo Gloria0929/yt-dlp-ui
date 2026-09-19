@@ -66,7 +66,8 @@ Compose 默认使用 4 GB 的 tmpfs 作为 yt-dlp 和 ffmpeg 的临时空间，�
 
     APP_PORT=8080 YTDLP_TMPFS_SIZE=8g YTDLP_MAX_WORKERS=2 docker compose up -d --build
 
-- `APP_PORT`：仅绑定宿主机回环地址的调试端口，默认 `3000`
+- `APP_HOST`：宿主机监听地址，默认 `0.0.0.0`，允许局域网访问
+- `APP_PORT`：宿主机监听端口，默认 `3000`
 - `YTDLP_TMPFS_SIZE`：所有并发任务共享的临时空间，默认 `4g`
 - `YTDLP_MAX_WORKERS`：同时运行的解析/下载进程数，默认 `4`
 - `YTDLP_TASK_TTL`：浏览器未领取文件的保留秒数，默认 `3600`
@@ -85,6 +86,8 @@ Compose 默认使用 4 GB 的 tmpfs 作为 yt-dlp 和 ffmpeg 的临时空间，�
     docker exec nginx nginx -s reload
 
 配置中的上游地址是 `frame-get:3000`，流量路径为 `Cloudflare -> Nginx:80 -> frame-get:3000`。Cloudflare 对外提供 HTTPS，所以浏览器可以使用本机文件夹选择功能；不支持该 API 的浏览器会自动回退到标准文件下载。Nginx 容器被重新创建后，需要确认它仍连接在 `frame-get-network` 网络中。
+
+局域网内也可以直接访问 `http://服务器内网地址:3000`，例如 `http://192.168.2.100:3000`。如果只允许本机和 Nginx 访问，可以设置 `APP_HOST=127.0.0.1` 后重新创建容器。
 
 当前任务文件索引保存在单个 FastAPI 进程内，因此容器内不要启动多个 Uvicorn worker。需要横向扩容时，应把任务索引和文件存储改为 Redis 与共享对象存储。
 
