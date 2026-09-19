@@ -85,7 +85,14 @@ Compose 默认使用 4 GB 的 tmpfs 作为 yt-dlp 和 ffmpeg 的临时空间，�
 
     http://localhost:3000
 
-这种方式不需要修改服务器上原有的 Nginx。如果 Cloudflare 流量必须先进入现有 Nginx 的 `80` 端口，则仍需在原 Nginx 中把 `video.blackwing.icu` 代理到 `http://192.168.2.100:3000`。项目内置 Nginx 已经处理 SSE、长时间下载、静态资源缓存和 API 转发。
+这种方式不需要修改服务器上原有的 Nginx。如果 Cloudflare 流量必须先进入现有 Nginx 的 `80` 端口，可以使用 `deploy/nginx.conf` 替换服务器现有配置；其中已经加入 `video.blackwing.icu -> http://192.168.2.100:3000`，并关闭 SSE 和下载响应的代理缓冲。替换后先检查再重载：
+
+    docker cp nginx:/etc/nginx/nginx.conf ./nginx.conf.backup
+    docker cp deploy/nginx.conf nginx:/etc/nginx/nginx.conf
+    docker exec nginx nginx -t
+    docker exec nginx nginx -s reload
+
+项目内置 Nginx 继续负责静态页面和 API 转发，服务器原有 Nginx 只负责按照子域名将请求转发到项目的 `3000` 端口。
 
 局域网内也可以直接访问 `http://服务器内网地址:3000`，例如 `http://192.168.2.100:3000`。如果只允许本机和 Nginx 访问，可以设置 `APP_HOST=127.0.0.1` 后重新创建容器。
 
