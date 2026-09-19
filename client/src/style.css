@@ -588,6 +588,12 @@ main {
   color: var(--accent);
   backdrop-filter: blur(8px);
 }
+.preview-art svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+  fill: currentColor;
+}
 .empty-preview h3 { max-width: 310px; color: #a9b4b0; font-size: 18px; }
 
 .task-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }

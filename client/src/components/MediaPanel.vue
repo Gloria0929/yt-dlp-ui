@@ -55,7 +55,13 @@ watch(
     </article>
 
     <article v-else class="empty-preview">
-      <div class="preview-art" aria-hidden="true"><span>▶</span></div>
+      <div class="preview-art" aria-hidden="true">
+        <span>
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M8 5.75v12.5L18 12 8 5.75Z" />
+          </svg>
+        </span>
+      </div>
       <p>视频预览</p>
       <h3>
         {{
