@@ -45,6 +45,13 @@ Vite 会把 /api 请求代理到 FastAPI。
 
 ## Docker 部署
 
+Compose 会同时构建两个容器：
+
+- `frame-get`：内置 Nginx，提供 Vue 页面并代理 `/api/`
+- `frame-get-api`：FastAPI、原生 `yt_dlp`、Node.js 与 ffmpeg，仅在 Docker 网络内监听
+
+两个容器通过自动创建的 `frame-get-internal-network` 通信，不需要加入服务器原有 Nginx 的 Docker 网络。
+
 构建并启动：
 
     docker compose up -d --build
@@ -56,7 +63,7 @@ Vite 会把 /api 请求代理到 FastAPI。
 查看状态与日志：
 
     docker compose ps
-    docker compose logs -f yt-dlp-ui
+    docker compose logs -f nginx backend
 
 停止服务：
 
@@ -72,20 +79,13 @@ Compose 默认使用 4 GB 的 tmpfs 作为 yt-dlp 和 ffmpeg 的临时空间，�
 - `YTDLP_MAX_WORKERS`：同时运行的解析/下载进程数，默认 `4`
 - `YTDLP_TASK_TTL`：浏览器未领取文件的保留秒数，默认 `3600`
 
-### 接入已有的 Nginx 与 Cloudflare
+### 接入 Cloudflare
 
-如果服务器已有 Nginx 占用宿主机的 `80` 端口，不要让本项目再次绑定 `80`。首次部署先创建共用网络，把现有 Nginx 容器接入该网络，再启动本项目：
+项目内置的 Nginx 发布在宿主机 `3000` 端口，不会占用现有 Nginx 使用的 `80` 端口。Cloudflare Tunnel 可将 `video.blackwing.icu` 的服务地址直接设置为：
 
-    docker network create frame-get-network
-    docker network connect frame-get-network nginx
-    docker compose up -d --build
+    http://localhost:3000
 
-网络只需创建和连接一次；如果命令提示网络已存在或 Nginx 已连接，可以忽略。将 `deploy/nginx-frame-get.conf.example` 复制到现有 Nginx 的 `/etc/nginx/conf.d/`，把示例域名改成 Cloudflare 中使用的域名，然后检查并重载：
-
-    docker exec nginx nginx -t
-    docker exec nginx nginx -s reload
-
-配置中的上游地址是 `frame-get:3000`，流量路径为 `Cloudflare -> Nginx:80 -> frame-get:3000`。Cloudflare 对外提供 HTTPS，所以浏览器可以使用本机文件夹选择功能；不支持该 API 的浏览器会自动回退到标准文件下载。Nginx 容器被重新创建后，需要确认它仍连接在 `frame-get-network` 网络中。
+这种方式不需要修改服务器上原有的 Nginx。如果 Cloudflare 流量必须先进入现有 Nginx 的 `80` 端口，则仍需在原 Nginx 中把 `video.blackwing.icu` 代理到 `http://192.168.2.100:3000`。项目内置 Nginx 已经处理 SSE、长时间下载、静态资源缓存和 API 转发。
 
 局域网内也可以直接访问 `http://服务器内网地址:3000`，例如 `http://192.168.2.100:3000`。如果只允许本机和 Nginx 访问，可以设置 `APP_HOST=127.0.0.1` 后重新创建容器。
 

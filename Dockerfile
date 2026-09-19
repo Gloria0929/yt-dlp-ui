@@ -1,10 +1,4 @@
-FROM node:22-bookworm-slim AS frontend
-
-WORKDIR /build
-COPY client/package.json client/package-lock.json ./client/
-RUN npm ci --prefix client
-COPY client ./client
-RUN npm run build --prefix client
+FROM node:22-bookworm-slim AS node_runtime
 
 
 FROM python:3.12-slim-bookworm AS runtime
@@ -24,14 +18,13 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
     && rm -rf /var/lib/apt/lists/*
 
 # yt-dlp uses Node for sites whose player extraction requires a JavaScript runtime.
-COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_runtime /usr/local/bin/node /usr/local/bin/node
 
 WORKDIR /app
 COPY requirements.txt ./
 RUN python -m pip install --no-cache-dir -r requirements.txt
 
 COPY server ./server
-COPY --from=frontend /build/client/dist ./client/dist
 
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --shell /usr/sbin/nologin app \

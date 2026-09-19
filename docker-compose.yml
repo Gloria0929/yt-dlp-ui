@@ -1,14 +1,12 @@
 services:
-  yt-dlp-ui:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
-    image: frame-get:latest
-    container_name: frame-get
-    ports:
-      # Keep host port 80 for the existing Nginx container. Port 3000 remains
-      # reachable from the LAN for diagnostics and direct intranet access.
-      - "${APP_HOST:-0.0.0.0}:${APP_PORT:-3000}:3000"
+    image: frame-get-api:latest
+    container_name: frame-get-api
+    expose:
+      - "3000"
     environment:
       HOST: 0.0.0.0
       PORT: 3000
@@ -28,7 +26,27 @@ services:
     restart: unless-stopped
     stop_grace_period: 20s
 
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    image: frame-get-web:latest
+    container_name: frame-get
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${APP_HOST:-0.0.0.0}:${APP_PORT:-3000}:8080"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
 networks:
   default:
-    name: frame-get-network
-    external: true
+    name: frame-get-internal-network
