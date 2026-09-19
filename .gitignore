@@ -1,0 +1,14 @@
+node_modules/
+client/node_modules/
+client/dist/
+.venv/
+.env
+.env.*
+!.env.example
+__pycache__/
+.pytest_cache/
+downloads/
+cookies.txt
+*.cookies.txt
+*.pyc
+.DS_Store

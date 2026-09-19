@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="简洁的 yt-dlp 视频与音频下载界面" />
+    <meta name="theme-color" content="#f1ede3" />
+    <script>
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("frame-get-theme") === "dark" ? "dark" : "paper";
+      } catch (_) {
+        document.documentElement.dataset.theme = "paper";
+      }
+    </script>
+    <title>FRAME/GET · 视频下载工作台</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

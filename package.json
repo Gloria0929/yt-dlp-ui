@@ -1,0 +1,16 @@
+{
+  "name": "yt-dlp-ui",
+  "version": "1.0.0",
+  "description": "FastAPI and Vue interface for yt-dlp",
+  "scripts": {
+    "dev": "concurrently -n server,client -c cyan,green \"npm run server\" \"npm run client\"",
+    "server": "python3 -m server",
+    "client": "npm run dev --prefix client",
+    "build": "npm run build --prefix client",
+    "test": "python3 -m pytest -q && npm test --prefix client"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

@@ -1,0 +1,35 @@
+services:
+  yt-dlp-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: frame-get:latest
+    container_name: frame-get
+    ports:
+      # Only expose the development/debug port on the host loopback address.
+      # The existing Nginx container should proxy to frame-get:3000 over the
+      # Compose network, so it remains the only service bound to host port 80.
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      YTDLP_TEMP_DIR: /tmp/yt-dlp-ui
+      YTDLP_TASK_TTL: "${YTDLP_TASK_TTL:-3600}"
+      YTDLP_MAX_WORKERS: "${YTDLP_MAX_WORKERS:-4}"
+    # Media exists only while yt-dlp/ffmpeg is processing or the browser has
+    # not fetched it yet. Successful transfers are deleted immediately.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=${YTDLP_TMPFS_SIZE:-4g},uid=10001,gid=10001,mode=1777
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+networks:
+  default:
+    name: frame-get-network
+    external: true
