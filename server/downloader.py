@@ -1,4 +1,5 @@
 """Native yt_dlp integration. No yt-dlp CLI or shell command is executed."""
+import base64
 import os
 import queue
 import shutil
@@ -154,13 +155,32 @@ def friendly_error(error):
     return message or '下载引擎返回了未知错误'
 
 
-def summarize_info(info):
+def inline_thumbnail(downloader, thumbnail_url):
+    """Inline a bounded thumbnail to avoid mobile mixed-content and hotlink failures."""
+    if not thumbnail_url or not thumbnail_url.startswith(('http://', 'https://')):
+        return thumbnail_url
+    try:
+        with downloader.urlopen(thumbnail_url) as response:
+            image = response.read(3 * 1024 * 1024 + 1)
+            if not image or len(image) > 3 * 1024 * 1024:
+                return thumbnail_url.replace('http://', 'https://', 1)
+            content_type = response.headers.get('Content-Type', 'image/jpeg').split(';', 1)[0]
+            if not content_type.startswith('image/'):
+                content_type = 'image/jpeg'
+            encoded = base64.b64encode(image).decode('ascii')
+            return f'data:{content_type};base64,{encoded}'
+    except Exception:
+        return thumbnail_url.replace('http://', 'https://', 1)
+
+
+def summarize_info(info, downloader):
     if info.get('_type') in ('playlist', 'multi_video') or 'entries' in info:
         info = next((entry for entry in info.get('entries', []) if entry), None)
         if not info:
             raise ValueError('播放列表中没有可解析的视频')
     keys = ('id', 'title', 'thumbnail', 'duration', 'uploader', 'channel', 'webpage_url', 'extractor', 'upload_date')
     result = {key: info.get(key) for key in keys}
+    result['thumbnail'] = inline_thumbnail(downloader, result.get('thumbnail'))
     result['formats'] = [
         {key: f.get(key) for key in ('format_id', 'ext', 'width', 'height', 'fps', 'filesize', 'filesize_approx', 'vcodec', 'acodec')}
         for f in info.get('formats', []) if f.get('ext') != 'mhtml'
@@ -215,7 +235,7 @@ def media_worker(action, url, settings_data, events):
                 info = downloader.extract_info(url, download=False)
                 if not info:
                     raise ValueError('未获取到视频信息')
-                emit({'type': 'info', 'info': summarize_info(info)}, terminal=True)
+                emit({'type': 'info', 'info': summarize_info(info, downloader)}, terminal=True)
             else:
                 code = downloader.download([url])
                 emit({'type': 'done', 'code': code}, terminal=True)

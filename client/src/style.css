@@ -301,7 +301,16 @@ main {
   border: 1px solid currentColor;
   border-radius: 50%;
   color: var(--accent);
-  font-size: 16px;
+}
+.mode-icon svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .mode-row strong, .mode-row small { display: block; }
 .mode-row strong { margin-bottom: 3px; font-size: 14px; }
