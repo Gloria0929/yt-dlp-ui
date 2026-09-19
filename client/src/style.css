@@ -117,7 +117,18 @@ button:active:not(:disabled) { transform: translateY(1px); }
   cursor: pointer;
   transition: border-color .2s, color .2s, background .2s;
 }
-.theme-toggle span { color: var(--accent); font-size: 14px; }
+.theme-icon { width: 15px; height: 15px; flex: none; color: var(--accent); }
+.theme-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.theme-label { white-space: nowrap; }
 .theme-toggle:hover { border-color: var(--ink); color: var(--ink); background: var(--surface-raised); }
 .service-state {
   display: flex;
@@ -722,8 +733,7 @@ footer {
   .topbar { height: 68px; }
   .service-state { font-size: 0; }
   .header-actions { gap: 10px; }
-  .theme-toggle { font-size: 0; width: 34px; height: 34px; padding: 0; justify-content: center; }
-  .theme-toggle span { font-size: 15px; }
+  .theme-toggle { min-height: 36px; padding: 0 10px; gap: 6px; justify-content: center; font-size: 10px; }
   main { padding-top: 47px; padding-bottom: 74px; }
   .intro { margin-bottom: 42px; }
   .intro::after { display: none; }
