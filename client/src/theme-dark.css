@@ -196,4 +196,7 @@
   [data-theme="dark"] .composer { grid-template-columns: 1fr; padding-top: 28px; }
   [data-theme="dark"] .side-panel { padding-left: 0; }
   [data-theme="dark"] .quality-grid { grid-template-columns: repeat(2, 1fr); }
+  [data-theme="dark"] .quality-grid button { border-right: 1px solid #30322e; border-bottom: 1px solid #30322e; }
+  [data-theme="dark"] .quality-grid button:nth-child(2n) { border-right: 0; }
+  [data-theme="dark"] .quality-grid button:last-child { border-right: 0; border-bottom: 0; }
 }
