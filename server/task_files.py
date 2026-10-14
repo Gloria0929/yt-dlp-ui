@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 
 
+IGNORED_SUFFIXES = {".part", ".ytdl", ".temp"}
+
 TEMP_ROOT = Path(os.environ.get("YTDLP_TEMP_DIR", "/tmp/yt-dlp-ui")).resolve()
 TASK_TTL_SECONDS = max(60, int(os.environ.get("YTDLP_TASK_TTL", "3600")))
 TASKS = {}
@@ -24,11 +26,10 @@ def create_task_directory():
 
 
 def _downloadable_files(task_dir):
-    ignored_suffixes = {".part", ".ytdl", ".temp"}
     return [
         path
         for path in sorted(task_dir.rglob("*"))
-        if path.is_file() and path.suffix.lower() not in ignored_suffixes
+        if path.is_file() and path.suffix.lower() not in IGNORED_SUFFIXES
     ]
 
 
@@ -54,6 +55,46 @@ def register_task_files(task_id, task_dir):
         "files": files,
     }
     return public_files
+
+
+def snapshot_directory(directory):
+    """记录目录当前状态，用于识别某个任务新写入的文件。"""
+    snapshot = {}
+    root = Path(directory)
+    if not root.is_dir():
+        return snapshot
+    for path in root.rglob("*"):
+        try:
+            if path.is_file():
+                stat = path.stat()
+                snapshot[str(path)] = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            continue
+    return snapshot
+
+
+def register_written_files(directory, before):
+    """桌面版直写模式：报告本次新写入或改动的文件，不需要再传回浏览器。"""
+    root = Path(directory)
+    written = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() in IGNORED_SUFFIXES:
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        if before.get(str(path)) == (stat.st_mtime_ns, stat.st_size):
+            continue
+        written.append({
+            "id": secrets.token_urlsafe(16),
+            "name": path.name,
+            "relativePath": path.relative_to(root).as_posix(),
+            "absolutePath": str(path),
+            "size": stat.st_size,
+            "saved": True,
+        })
+    return written
 
 
 def get_task_file(task_id, file_id):

@@ -6,8 +6,14 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import yt_dlp
-from server.models import DEFAULT_OUTPUT, Settings
+from server.certs import install_ca_bundle
+
+# 必须在导入 yt_dlp 之前合并 CA：yt-dlp 在导入时决定 certifi 是否可用，
+# 而 macOS 上代理软件的根证书只存在于系统钥匙串里。
+CA_BUNDLE = install_ca_bundle()
+
+import yt_dlp  # noqa: E402
+from server.models import DEFAULT_OUTPUT, Settings  # noqa: E402
 
 OUTPUT_TEMPLATES = {
     'title-id': '%(title)s [%(id)s].%(ext)s',
@@ -143,7 +149,8 @@ def build_options(settings: Settings, *, preview=False):
 def friendly_error(error):
     message = str(error).removeprefix('ERROR: ').strip()
     if 'CERTIFICATE_VERIFY_FAILED' in message or 'certificate verify failed' in message:
-        return 'TLS 证书校验失败。请更新 Python 的 certifi 证书，或检查代理的 HTTPS 证书。\n' + message
+        return ('TLS 证书校验失败。已尝试合并系统钥匙串中的证书；请确认代理软件的 HTTPS 解密已开启并信任其根证书，'
+                '或在“更多设置”中填写代理地址。\n' + message)
     if 'Sign in' in message or 'cookies' in message.lower() or '403' in message:
         return '站点可能需要登录或限制访问。请在更多设置中选择已登录的浏览器，必要时设置代理。\n' + message
     if 'Unsupported URL' in message:
@@ -190,6 +197,8 @@ def summarize_info(info, downloader):
 
 def media_worker(action, url, settings_data, events):
     """An isolated Python worker makes cancel/disconnect stop network and ffmpeg work."""
+    # spawn 子进程会重新导入本模块，证书补丁必须在这里再做一次。
+    install_ca_bundle()
     if os.name == 'posix':
         os.setsid()
 

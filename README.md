@@ -24,6 +24,66 @@
     npm install
     npm install --prefix client
 
+## 桌面版
+
+桌面版使用 Electron 承载现有 Vue 界面，并在窗口启动时拉起随应用打包的 Python 下载服务。打开后即可使用，不需要另开终端或浏览器。
+
+首次准备桌面构建环境：
+
+    npm install
+    npm run desktop:setup
+
+本机开发运行（自动构建前端并打开桌面窗口）：
+
+    npm run desktop:dev
+
+构建当前平台的安装包：
+
+    npm run desktop:dist
+
+只生成未压缩的应用目录用于本地验证：
+
+    npm run desktop:package
+
+桌面版特性：
+
+- 下载服务只监听 `127.0.0.1` 的随机端口，并用每次启动生成的令牌校验 `/api/` 请求
+- 内置 arm64 原生 ffmpeg，无需用户单独安装
+- 原生文件夹选择，下载引擎直接写入所选目录，默认是系统下载目录
+- 下载完成后可在任务卡片里“在文件夹中显示”，直接跳到访达 / 资源管理器中的文件
+- 启动时自动合并系统钥匙串里的证书，代理软件（如 Quantumult X、Surge）的 HTTPS 解密证书无需手动配置
+- 关闭窗口时自动结束下载服务及其子进程，临时文件在用户数据目录中清理
+
+桌面版相对网页版的区别：
+
+| 能力 | 网页版 | 桌面版 |
+| --- | --- | --- |
+| 文件落盘 | 先下到服务端临时目录，再经浏览器中转（需 File System Access API） | 下载引擎直接写入所选本机目录，不经浏览器中转 |
+| 保存位置 | 只能拿到文件夹句柄，拿不到真实路径 | 显示并记住绝对路径，可随时更换 |
+| 下载后操作 | 无 | 在文件夹中显示 |
+| 大文件 | 受浏览器内存与下载管理器影响 | 直接落盘，无中转 |
+
+`npm run desktop:backend` 会把 `server/desktop.py` 打包成 `desktop/build/frame-get-api`，并把 ffmpeg 复制到 `desktop/build/ffmpeg`，两者会作为 Electron 的 extraResources 一起分发。
+
+对已打包的后端做一次真实下载回归（需要联网，会启动冻结后端并走完整下载流程）：
+
+    npm run desktop:backend
+    npm run desktop:smoke
+
+应用图标由脚本生成（需要 Pillow，仅打包时用到）：
+
+    python3 desktop/build_icon.py
+
+会写出 `build/icon.icns` 与 `build/icon.png`，electron-builder 在打包时自动取用。
+
+### macOS 首次打开
+
+当前安装包没有 Apple 开发者签名。首次打开时请在 `release/mac-arm64/FRAME GET.app` 上右键选择“打开”，或执行：
+
+    xattr -dr com.apple.quarantine "release/mac-arm64/FRAME GET.app"
+
+否则系统会提示应用已损坏或来自未识别的开发者。也可以执行 `npm run desktop:package` 生成未压缩的应用目录直接运行。
+
 ## 开发运行
 
     npm run dev
@@ -107,6 +167,8 @@ Compose 默认使用 4 GB 的 tmpfs 作为 yt-dlp 和 ffmpeg 的临时空间，�
 - server/app.py：FastAPI 路由、SSE 流和任务生命周期
 - server/downloader.py：原生 yt_dlp.YoutubeDL 集成、进度钩子与错误提示
 - server/models.py：请求模型与输入校验
-- server/task_files.py：临时任务文件、一次性下载地址与超时清理
+- server/task_files.py：临时任务文件、一次性下载地址与超时清理，以及直写模式下的目录快照
+- server/certs.py：合并 certifi 与 macOS 钥匙串证书，供 yt-dlp 与代理软件共存
+- server/desktop.py：冻结后端入口，读取 PORT 后启动同一套 FastAPI 应用
 
 每个解析或下载任务在独立 Python 进程中运行。浏览器取消请求或断开连接时，FastAPI 会终止对应任务及其 ffmpeg 子进程并删除临时目录。文件 URL 使用不可预测的任务令牌，文件传输完成后立即失效。

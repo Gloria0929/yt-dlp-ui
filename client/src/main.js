@@ -1,6 +1,7 @@
 import { createApp } from "vue";
 import "./style.css";
 import "./theme-dark.css";
+import "./desktop.css";
 
 import App from "./App.vue";
 

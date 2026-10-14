@@ -18,6 +18,8 @@ export function initialState() {
   return {
     mode: 'video', quality: 'best', container: '', audioFormat: 'mp3',
     outputDir: '', fileNameTemplate: 'title-id', overwriteMode: 'resume',
+    // 桌面版由主进程置为 true：文件直接写进所选目录，不再经浏览器中转。
+    directWrite: false,
     playlist: false, playlistItems: '',
     subtitles: 'none', subLangs: 'zh.*,en',
     embedSubs: false, proxy: '', cookiesFromBrowser: '', rateLimit: '',

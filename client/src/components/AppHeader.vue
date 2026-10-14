@@ -1,6 +1,8 @@
 <script setup>
 defineProps({
   health: { type: Object, default: null },
+  healthLoading: { type: Boolean, default: false },
+  desktop: { type: Boolean, default: false },
   theme: { type: String, default: "paper" },
 });
 
@@ -31,9 +33,10 @@ defineEmits(["toggle-theme"]);
         </span>
         <span class="theme-label">{{ theme === "paper" ? "朋克主题" : "纸张主题" }}</span>
       </button>
-      <div class="service-state" :class="{ offline: !health?.ok }">
+      <span v-if="desktop" class="desktop-badge">桌面版</span>
+      <div class="service-state" :class="{ offline: !health?.ok && !healthLoading, pending: healthLoading }" role="status">
         <span class="status-dot"></span>
-        {{ health?.ok ? `引擎在线 · ${health.version}` : "后端未连接" }}
+        {{ healthLoading ? "正在连接下载引擎" : health?.ok ? `引擎在线 · ${health.version}` : "后端未连接" }}
       </div>
     </div>
   </header>

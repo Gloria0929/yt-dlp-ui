@@ -1,16 +1,44 @@
 {
   "name": "yt-dlp-ui",
   "version": "1.0.0",
-  "description": "FastAPI and Vue interface for yt-dlp",
+  "description": "FRAME/GET desktop downloader",
+  "author": "FRAME/GET",
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "concurrently -n server,client -c cyan,green \"npm run server\" \"npm run client\"",
     "server": "python3 -m server",
     "client": "npm run dev --prefix client",
     "build": "npm run build --prefix client",
-    "test": "python3 -m pytest -q && npm test --prefix client"
+    "test": "python3 -m pytest -q && npm test --prefix client",
+    "desktop:setup": "python3 -m venv .venv && .venv/bin/python -m pip install -r requirements-desktop.txt",
+    "desktop:dev": "npm run build && electron .",
+    "desktop:backend": ".venv/bin/python desktop/build_backend.py",
+    "desktop:icon": "python3 desktop/build_icon.py",
+    "desktop:smoke": "python3 desktop/smoke_test.py",
+    "desktop:package": "npm run build && npm run desktop:icon && npm run desktop:backend && electron-builder --dir",
+    "desktop:dist": "npm run build && npm run desktop:icon && npm run desktop:backend && electron-builder"
   },
-  "dependencies": {},
+  "build": {
+    "appId": "dev.frameget.desktop",
+    "productName": "FRAME GET",
+    "directories": { "output": "release" },
+    "files": ["desktop/*.cjs", "package.json"],
+    "extraResources": [
+      { "from": "client/dist", "to": "frontend" },
+      { "from": "desktop/build/frame-get-api", "to": "backend" },
+      { "from": "desktop/build/ffmpeg", "to": "ffmpeg" }
+    ],
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.video",
+      "icon": "build/icon.icns"
+    },
+    "win": { "target": ["nsis", "zip"], "icon": "build/icon.png" },
+    "linux": { "target": ["AppImage"], "icon": "build/icon.png" }
+  },
   "devDependencies": {
-    "concurrently": "^8.2.0"
+    "concurrently": "^8.2.0",
+    "electron": "^37.10.3",
+    "electron-builder": "^26.15.3"
   }
 }

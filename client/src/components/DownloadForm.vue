@@ -14,6 +14,8 @@ defineProps({
   running: { type: Boolean, default: false },
   stopping: { type: Boolean, default: false },
   saveDirectoryName: { type: String, default: "" },
+  saveTargetLabel: { type: String, default: "浏览器下载目录" },
+  desktop: { type: Boolean, default: false },
   directoryPickerSupported: { type: Boolean, default: false },
 });
 
@@ -123,12 +125,16 @@ defineEmits([
       <div class="save-target">
         <div>
           <p>保存到本机</p>
-          <strong>{{ saveDirectoryName || "浏览器下载目录" }}</strong>
+          <strong :title="saveDirectoryName">{{ saveDirectoryName || saveTargetLabel }}</strong>
           <small>
             {{
               saveDirectoryName
-                ? "下载完成后直接写入这个文件夹"
-                : "未选择文件夹时由浏览器处理保存位置"
+                ? desktop
+                  ? "下载引擎直接写入这个文件夹，不经过浏览器中转"
+                  : "下载完成后直接写入这个文件夹"
+                : desktop
+                  ? "默认保存到系统下载目录，可随时更换文件夹"
+                  : "未选择文件夹时由浏览器处理保存位置"
             }}
           </small>
         </div>

@@ -16,6 +16,8 @@ class Settings(BaseModel):
     container: Literal['', 'mp4', 'mkv'] = ''
     audioFormat: Literal['mp3', 'm4a', 'flac', 'wav', 'opus'] = 'mp3'
     outputDir: str = Field(default='', max_length=4096)
+    # 仅桌面版可用：把文件直接写进用户选定的本机目录，不再经浏览器中转。
+    directWrite: bool = False
     fileNameTemplate: Literal['title-id', 'title', 'uploader', 'playlist'] = 'title-id'
     overwriteMode: Literal['resume', 'skip', 'overwrite'] = 'resume'
     playlist: bool = False

@@ -23,6 +23,8 @@ import {
 const urlText = ref("");
 const settings = reactive(initialState());
 const health = ref(null);
+const healthLoading = ref(true);
+let healthRetry = null;
 const info = ref(null);
 const infoLoading = ref(false);
 const running = ref(false);
@@ -39,6 +41,10 @@ const toast = ref("");
 const theme = ref("paper");
 const directoryPickerSupported = ref(false);
 const directoryHandle = shallowRef(null);
+const desktop = window.frameGetDesktop || null;
+const saveDirectoryPath = ref("");
+const savingFiles = ref(false);
+const savedFiles = ref([]);
 let controller = null;
 let toastTimer = null;
 
@@ -69,7 +75,13 @@ const videoMeta = computed(() => {
     info.value.extractor,
   ].filter(Boolean);
 });
-const saveDirectoryName = computed(() => directoryHandle.value?.name || "");
+const saveDirectoryName = computed(() =>
+  desktop ? saveDirectoryPath.value : directoryHandle.value?.name || "",
+);
+const saveTargetLabel = computed(() => desktop ? "桌面下载目录" : "浏览器下载目录");
+const canSubmit = computed(() => canRun.value && !savingFiles.value);
+/** 桌面版且已选定目录时，后端把文件直接写进该目录，省掉一次中转复制。 */
+const directWrite = computed(() => Boolean(desktop && saveDirectoryPath.value));
 
 watch(urlText, () => {
   info.value = null;
@@ -130,6 +142,14 @@ async function loadHealth() {
     health.value = response.ok ? await response.json() : null;
   } catch {
     health.value = null;
+  } finally {
+    healthLoading.value = false;
+    if (!health.value?.ok && !healthRetry) {
+      healthRetry = setTimeout(() => {
+        healthRetry = null;
+        loadHealth();
+      }, 5000);
+    }
   }
 }
 
@@ -150,7 +170,7 @@ async function extractInfo() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
-      body: JSON.stringify({ url: primaryUrl.value, settings }),
+      body: JSON.stringify({ url: primaryUrl.value, settings: requestSettings() }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(friendlyHttpError(response, data));
@@ -162,6 +182,15 @@ async function extractInfo() {
     infoLoading.value = false;
     controller = null;
   }
+}
+
+/** 桌面版把 directWrite 与实际保存目录一起发给后端；浏览器模式始终为 false。 */
+function requestSettings() {
+  return {
+    ...settings,
+    directWrite: directWrite.value,
+    outputDir: directWrite.value ? saveDirectoryPath.value : settings.outputDir,
+  };
 }
 
 function addLog(line, level = "info") {
@@ -180,6 +209,32 @@ async function discardReadyFile(file) {
 
 async function saveReadyFiles(files) {
   if (!files?.length) throw new Error("下载完成，但服务端没有返回文件");
+  if (desktop) {
+    // 直写模式下后端已经把文件放进目标目录，这里只需要汇报结果。
+    const alreadySaved = files.every((file) => file.saved && file.absolutePath);
+    if (alreadySaved) {
+      files.forEach((file) => {
+        savedFiles.value.push({ name: file.name, path: file.absolutePath });
+        addLog(`已保存到 ${file.absolutePath}`, "success");
+      });
+      return;
+    }
+    savingFiles.value = true;
+    try {
+      const saved = await desktop.saveFiles(files, settings.overwriteMode);
+      for (const result of saved.results) {
+        addLog(
+          result.skipped
+            ? `已跳过本机同名文件 · ${result.relativePath}`
+            : `已保存到 ${saved.directory}/${result.relativePath}`,
+          result.skipped ? "warning" : "success",
+        );
+      }
+    } finally {
+      savingFiles.value = false;
+    }
+    return;
+  }
   if (directoryHandle.value) {
     for (const file of files) {
       const result = await saveFileToDirectory(file, directoryHandle.value, {
@@ -231,7 +286,7 @@ async function downloadOne(url) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     signal: controller.signal,
-    body: JSON.stringify({ url, settings }),
+    body: JSON.stringify({ url, settings: requestSettings() }),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
@@ -241,7 +296,7 @@ async function downloadOne(url) {
 }
 
 async function startDownload() {
-  if (!canRun.value || running.value) {
+  if (!canRun.value || running.value || savingFiles.value) {
     error.value = invalidUrls.value.length
       ? "存在格式不正确的链接"
       : settingError.value || "请先粘贴视频链接";
@@ -251,6 +306,7 @@ async function startDownload() {
   stopping.value = false;
   error.value = "";
   logs.value = [];
+  savedFiles.value = [];
   controller = new AbortController();
   try {
     for (let index = 0; index < urls.value.length; index += 1) {
@@ -305,8 +361,23 @@ async function copyCommand() {
   }
 }
 
+async function revealSavedFile(file) {
+  try {
+    await desktop.revealFile(file.path);
+  } catch (revealError) {
+    // Electron 会把 IPC 错误包装成 "Error invoking remote method ..."，这里只保留原因。
+    const reason = String(revealError.message || "").split("Error: ").pop();
+    error.value = reason || "无法在文件夹中显示该文件";
+  }
+}
+
 async function selectSaveDirectory() {
   try {
+    if (desktop) {
+      saveDirectoryPath.value = await desktop.chooseDirectory();
+      notify(`保存位置：${saveDirectoryPath.value}`);
+      return;
+    }
     const selected = await chooseDirectory(window);
     if (selected) {
       directoryHandle.value = selected;
@@ -331,6 +402,7 @@ function reset() {
   logs.value = [];
   error.value = "";
   progress.value = 0;
+  savedFiles.value = [];
   status.value = "等待任务";
 }
 
@@ -338,22 +410,29 @@ onMounted(() => {
   const savedTheme = localStorage.getItem("frame-get-theme");
   theme.value = savedTheme === "dark" ? "dark" : "paper";
   document.documentElement.dataset.theme = theme.value;
-  directoryPickerSupported.value = supportsDirectoryPicker(window);
+  directoryPickerSupported.value = Boolean(desktop) || supportsDirectoryPicker(window);
+  if (desktop) desktop.currentDirectory().then((value) => (saveDirectoryPath.value = value));
   loadHealth();
 });
 </script>
 
 <template>
   <div class="shell">
-    <AppHeader :health="health" :theme="theme" @toggle-theme="toggleTheme" />
+    <a class="skip-link" href="#download-heading">跳转到下载区</a>
+    <AppHeader :health="health" :health-loading="healthLoading" :desktop="Boolean(desktop)" :theme="theme" @toggle-theme="toggleTheme" />
 
     <main id="main">
       <section class="intro">
-        <p class="eyebrow">YT-DLP DOWNLOAD DESK</p>
-        <h1>贴上链接，<br /><em>把视频带走。</em></h1>
-        <p class="intro-copy">
-          支持视频、音频、字幕与多个链接队列，下载过程实时可见。
-        </p>
+        <div class="intro-heading">
+          <div>
+            <p class="eyebrow">你的媒体下载工作台</p>
+            <h1>从链接到文件，<em>就这么简单。</em></h1>
+          </div>
+          <p class="intro-copy">粘贴链接、选择格式，下载进度和保存位置都清晰可见。</p>
+        </div>
+        <div class="workflow-steps" aria-label="使用步骤">
+          <span><b>01</b> 粘贴链接</span><span><b>02</b> 选择格式</span><span><b>03</b> 保存到本机</span>
+        </div>
       </section>
 
       <div class="workspace">
@@ -364,11 +443,13 @@ onMounted(() => {
           :invalid-count="invalidUrls.length"
           :setting-error="settingError"
           :error="error"
-          :can-run="canRun"
+          :can-run="canSubmit"
           :info-loading="infoLoading"
           :running="running"
           :stopping="stopping"
           :save-directory-name="saveDirectoryName"
+          :save-target-label="saveTargetLabel"
+          :desktop="Boolean(desktop)"
           :directory-picker-supported="directoryPickerSupported"
           @reset="reset"
           @extract="extractInfo"
@@ -381,6 +462,7 @@ onMounted(() => {
           :info-loading="infoLoading"
           :video-meta="videoMeta"
           :running="running"
+          :saving-files="savingFiles"
           :percentage="percentage"
           :status="status"
           :url-count="urls.length"
@@ -390,14 +472,16 @@ onMounted(() => {
           :eta="eta"
           :logs="logs"
           :command="command"
+          :saved-files="savedFiles"
+          :desktop="Boolean(desktop)"
           @copy-command="copyCommand"
+          @reveal-file="revealSavedFile"
         />
       </div>
     </main>
 
     <footer>
-      <span>FRAME/GET</span><span>FASTAPI + NATIVE YT_DLP</span
-      ><span>文件保存在本机</span>
+      <span>FRAME/GET</span><span>使用 yt-dlp 驱动</span><span>文件保存在本机</span>
     </footer>
     <ToastNotice :message="toast" />
   </div>

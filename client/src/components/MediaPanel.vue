@@ -6,6 +6,7 @@ const props = defineProps({
   infoLoading: { type: Boolean, default: false },
   videoMeta: { type: Array, default: () => [] },
   running: { type: Boolean, default: false },
+  savingFiles: { type: Boolean, default: false },
   percentage: { type: Number, default: 0 },
   status: { type: String, default: "" },
   urlCount: { type: Number, default: 0 },
@@ -15,9 +16,11 @@ const props = defineProps({
   eta: { type: String, default: "" },
   logs: { type: Array, default: () => [] },
   command: { type: String, default: "" },
+  savedFiles: { type: Array, default: () => [] },
+  desktop: { type: Boolean, default: false },
 });
 
-defineEmits(["copy-command"]);
+defineEmits(["copy-command", "reveal-file"]);
 
 const logView = ref(null);
 
@@ -54,6 +57,13 @@ watch(
       </div>
     </article>
 
+    <article v-else-if="infoLoading" class="empty-preview loading-preview" aria-label="正在读取视频信息">
+      <div class="preview-skeleton"></div>
+      <div class="skeleton-line"></div>
+      <div class="skeleton-line short"></div>
+      <p class="loading-caption">正在连接视频站点并读取封面…</p>
+    </article>
+
     <article v-else class="empty-preview">
       <div class="preview-art" aria-hidden="true">
         <span>
@@ -63,18 +73,13 @@ watch(
         </span>
       </div>
       <p>视频预览</p>
-      <h3>
-        {{
-          infoLoading
-            ? "正在连接视频站点…"
-            : "读取后会在这里显示标题与封面"
-        }}
-      </h3>
+      <h3>读取后会在这里显示标题与封面</h3>
     </article>
 
     <article
       class="task-card"
       :class="{ active: running, complete: !running && percentage === 100 }"
+      role="status"
     >
       <div class="task-head">
         <div>
@@ -83,9 +88,22 @@ watch(
         </div>
         <span>{{ Math.round(percentage) }}%</span>
       </div>
-      <div class="progress-track">
+      <div v-if="running || percentage > 0" class="progress-track" role="progressbar" :aria-valuenow="Math.round(percentage)" aria-valuemin="0" aria-valuemax="100" :aria-label="status">
         <i :style="{ width: `${percentage}%` }"></i>
       </div>
+      <p v-if="savingFiles" class="saving-hint">正在写入本机文件，请勿关闭窗口</p>
+      <ul v-if="savedFiles.length" class="saved-list">
+        <li v-for="file in savedFiles" :key="file.path">
+          <span :title="file.path">{{ file.name }}</span>
+          <button
+            v-if="desktop"
+            type="button"
+            @click="$emit('reveal-file', file)"
+          >
+            在文件夹中显示
+          </button>
+        </li>
+      </ul>
       <div class="task-stats">
         <span v-if="urlCount > 1">{{ currentIndex + 1 }} / {{ urlCount }}</span>
         <span>{{ taskTitle || "尚未开始" }}</span>

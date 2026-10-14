@@ -8,6 +8,7 @@ import shutil
 import signal
 import time
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -26,8 +27,10 @@ from server.task_files import (
     create_task_directory,
     get_task_file,
     register_task_files,
+    register_written_files,
     release_task_file,
     remove_task,
+    snapshot_directory,
 )
 
 CONTEXT = multiprocessing.get_context("spawn")
@@ -87,6 +90,15 @@ async def lifespan(app):
 app = FastAPI(title="yt-dlp 下载工作台", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def protect_desktop_api(request: Request, call_next):
+    desktop_token = os.environ.get("YTDLP_DESKTOP_TOKEN")
+    if desktop_token and request.url.path.startswith("/api/"):
+        if request.headers.get("X-Desktop-Token") != desktop_token:
+            return JSONResponse(status_code=403, content={"error": "拒绝访问桌面应用的本地服务"})
+    return await call_next(request)
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error(request, error):
     messages = [
@@ -104,7 +116,7 @@ async def health():
         "engine": "yt_dlp",
         "version": yt_dlp_version,
         "ffmpeg": bool(shutil.which("ffmpeg")),
-        "storage": "browser",
+        "storage": "desktop" if os.environ.get("YTDLP_DESKTOP_TOKEN") else "browser",
         "taskTtlSeconds": TASK_TTL_SECONDS,
     }
 
@@ -200,11 +212,35 @@ async def download(payload: MediaRequest, request: Request):
             content={"error": "当前选项需要 ffmpeg，请安装 ffmpeg 后重新下载"},
         )
 
-    task_id, task_dir = create_task_directory()
-    settings_data = settings.model_dump()
-    # Never trust a browser-supplied server path. Every request gets an isolated
-    # short-lived directory and the result is transferred back to that browser.
-    settings_data["outputDir"] = str(task_dir)
+    direct = settings.directWrite
+    if direct and not os.environ.get("YTDLP_DESKTOP_TOKEN"):
+        # 只有桌面版外壳能证明自己是本地可信调用方。
+        return JSONResponse(
+            status_code=400,
+            content={"error": "直接写入本机目录仅在桌面版可用"},
+        )
+    if direct:
+        target = Path(settings.outputDir).expanduser()
+        if not target.is_absolute():
+            return JSONResponse(status_code=422, content={"error": "保存位置必须是绝对路径"})
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return JSONResponse(
+                status_code=422,
+                content={"error": "无法写入所选文件夹，请在桌面版重新选择保存位置"},
+            )
+        task_id, task_dir = "", target
+        settings_data = settings.model_dump()
+        settings_data["outputDir"] = str(target)
+        before = await asyncio.to_thread(snapshot_directory, target)
+    else:
+        task_id, task_dir = create_task_directory()
+        before = {}
+        settings_data = settings.model_dump()
+        # Never trust a browser-supplied server path. Every request gets an isolated
+        # short-lived directory and the result is transferred back to that browser.
+        settings_data["outputDir"] = str(task_dir)
 
     async def stream():
         ready = False
@@ -214,15 +250,22 @@ async def download(payload: MediaRequest, request: Request):
             ):
                 if event["type"] == "done":
                     try:
-                        event["files"] = await asyncio.to_thread(
-                            register_task_files, task_id, task_dir
-                        )
+                        if direct:
+                            # 桌面版：文件已经在用户目录里，只需报告新写入的内容。
+                            event["files"] = await asyncio.to_thread(
+                                register_written_files, task_dir, before
+                            )
+                        else:
+                            event["files"] = await asyncio.to_thread(
+                                register_task_files, task_id, task_dir
+                            )
                         ready = True
                     except Exception as error:
                         event = {"type": "error", "error": str(error)}
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         finally:
-            if not ready:
+            # 直写模式绝不删除用户自己的目录。
+            if not ready and not direct:
                 await asyncio.to_thread(remove_task, task_id, task_dir)
 
     return StreamingResponse(
@@ -262,9 +305,11 @@ async def discard_file(task_id: str, file_id: str):
     return {"ok": True}
 
 
-if (ROOT / "client" / "dist").is_dir():
+frontend_dir = os.environ.get("YTDLP_FRONTEND_DIR")
+frontend_path = os.path.abspath(frontend_dir) if frontend_dir else ROOT / "client" / "dist"
+if os.path.isdir(frontend_path):
     app.mount(
         "/",
-        StaticFiles(directory=ROOT / "client" / "dist", html=True),
+        StaticFiles(directory=frontend_path, html=True),
         name="frontend",
     )
